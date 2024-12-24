@@ -1,8 +1,11 @@
 streamlit
-ydata-profiling
+ydata-profiling==4.1.2
 streamlit-pandas-profiling
 torch
 pandas
 numpy
 scikit-learn
+datasets
 dacite>=1.6.0,<1.8.0
+requests<2.29,>=2.24.0
+tqdm<4.65,>=4.48.2
