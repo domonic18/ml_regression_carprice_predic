@@ -192,7 +192,7 @@ def main():
     logging.info(f"模型结构:\n{model}")
     
     # 设置训练参数
-    epochs = 100
+    epochs = 10000
     learning_rate = 1e-4
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
