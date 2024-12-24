@@ -35,15 +35,25 @@ https://tianchi.aliyun.com/dataset/175540
 
 
 ## 使用方法
-1. 安装依赖
+1. 创建虚拟环境
+```
+conda create --name deeplearning python=3.10
+```
+
+2. 激活虚拟环境
+```
+conda activate deeplearning
+```
+
+3. 安装依赖
 ```
 pip install -r requirements.txt
 ```
 
-2. 下载数据集
+1. 下载数据集
 访问下载地址，将数据集下载到data目录下
 
-3. 运行项目
+1. 运行项目
 ```
 streamlit run app.py
 ```
