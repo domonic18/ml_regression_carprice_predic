@@ -39,7 +39,11 @@ https://tianchi.aliyun.com/dataset/175540
 ```
 pip install -r requirements.txt
 ```
-2. 运行项目
+
+2. 下载数据集
+访问下载地址，将数据集下载到data目录下
+
+3. 运行项目
 ```
 streamlit run app.py
 ```
