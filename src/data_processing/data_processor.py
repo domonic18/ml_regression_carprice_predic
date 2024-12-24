@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from sklearn.model_selection import train_test_split
 import logging
 
@@ -41,9 +40,9 @@ class DataProcessor:
             tuple: (特征数据X, 目标变量y)
         """
         logging.info("开始分析数据...")
-        logging.info(f"数��形状: {df.shape}")
-        logging.info(f"\n数据类型信息:\n{df.dtypes}")
-        logging.info(f"\n数据统计信息:\n{df.describe()}")
+        logging.info("数据形状: %s", df.shape)
+        logging.info("\n数据类型信息:\n%s", df.dtypes)
+        logging.info("\n数据统计信息:\n%s", df.describe())
         
         if 'price' not in df.columns:
             raise ValueError("数据中缺少'price'列")

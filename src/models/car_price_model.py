@@ -1,5 +1,6 @@
 import torch.nn as nn
 
+
 class CarPriceModel(nn.Module):
     """
     二手车价格预测模型
@@ -24,6 +25,9 @@ class CarPriceModel(nn.Module):
         self.linear3 = nn.Linear(32, out_features)
 
     def forward(self, x):
+        """
+        前向传播
+        """
         x = self.linear1(x)
         x = self.bn1(x)
         x = self.relu1(x)
