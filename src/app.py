@@ -7,8 +7,6 @@ import streamlit as st
 import pandas as pd
 import torch
 import os
-# from ydata_profiling import ProfileReport
-# from streamlit_pandas_profiling import st_profile_report
 from ydata_profiling import ProfileReport
 import pandas as pd
 from data_processing.data_processor import DataProcessor
@@ -81,6 +79,14 @@ def load_model(model_path, input_features):
     model.eval()
     return model
 
+def show_file_uploader():
+    """显示文件上传组件"""
+    uploaded_file = st.sidebar.file_uploader("选择CSV文件", type="csv", key="shared_uploader")
+    if uploaded_file and uploaded_file != st.session_state.get('uploaded_file'):
+        st.session_state.uploaded_file = uploaded_file
+        st.session_state.df = pd.read_csv(uploaded_file, delimiter='\s+')
+    return uploaded_file
+
 def main():
     st.title("二手车价格预测系统")
     
@@ -98,41 +104,70 @@ def main():
     
     if menu == "数据分析":
         st.sidebar.header("数据上传")
-        uploaded_file = st.sidebar.file_uploader("选择CSV文件", type="csv")
+        uploaded_file = show_file_uploader()
         
         if uploaded_file:
-            st.session_state.uploaded_file = uploaded_file
-            df = pd.read_csv(uploaded_file, delimiter='\s+')
-            st.dataframe(df)
+            st.dataframe(st.session_state.df)
 
-            # 添加按钮显示"分析数据"
             if st.button("分析数据"):
                 with st.spinner("正在生成详细分析报告，请稍候..."):
-                    profile = ProfileReport(df, title="数据分析报告", minimal=True)
-
-                    # Generate the report HTML
+                    profile = ProfileReport(st.session_state.df, title="数据分析报告", minimal=True)
                     report_html = profile.to_html()
-
                     st.subheader("Pandas Profiling Report")
-                    # Adjust the width and height to best fit your screen
                     st.components.v1.html(report_html, width=1000, height=550, scrolling=True)
     
     elif menu == "数据清理":
-        if st.session_state.uploaded_file is None:
-            st.sidebar.warning("请先在数据分析页面上传文件")
-        else:
-            if st.sidebar.button("开始数据清理"):
-                df = pd.read_csv(st.session_state.uploaded_file)
+        st.sidebar.header("数据上传")
+        uploaded_file = show_file_uploader()
+        
+        if uploaded_file:
+            # 将数据清理按钮移到侧边栏
+            if st.sidebar.button("开始数据清理", type="primary"):
                 processor = DataProcessor()
                 
+                # 在主页面显示进度
                 with st.spinner("正在清理数据..."):
-                    X, y = processor.load_and_analyze_data(st.session_state.uploaded_file)
-                    X_train, X_test, y_train, y_test = processor.prepare_data(X, y)
+                    X, y = processor.load_and_analyze_data(st.session_state.df)
+                    X_test, X_train, y_test, y_train = processor.prepare_data(X, y)
                     st.session_state.cleaned_data = (X_train, X_test, y_train, y_test)
+                    st.session_state.cleaned_df = pd.DataFrame(X_train)
                 
                 st.success("数据清理完成！")
-                st.write("清理后的数据预览（前10条）：")
-                st.write(pd.DataFrame(X_train[:10]))
+                
+            # 在侧边栏添加保存相关控件
+            if 'cleaned_df' in st.session_state:
+                st.sidebar.markdown("---")  # 添加分隔线
+                st.sidebar.subheader("保存清理后的数据")
+                
+                # 添加目录选择输入框到侧边栏,默认保存到上级的data目录
+                current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                default_save_dir = os.path.join(current_dir, "data")
+                
+                save_dir = st.sidebar.text_input(
+                    "保存目录",
+                    value=default_save_dir,
+                    help="输入要保存清理后数据的目录路径",
+                    key="save_dir_input"
+                )
+                
+                if st.sidebar.button("保存数据"):
+                    original_filename = os.path.splitext(st.session_state.uploaded_file.name)[0]
+                    cleaned_filename = f"{original_filename}_cleaned.csv"
+                    
+                    try:
+                        save_path = os.path.join(save_dir, cleaned_filename)
+                        os.makedirs(save_dir, exist_ok=True)
+                        st.session_state.cleaned_df.to_csv(save_path, index=False)
+                        st.sidebar.success(f"数据已保存至: {save_path}")
+                    except Exception as e:
+                        st.sidebar.error(f"保存文件时发生错误: {str(e)}")
+            
+            # 在主页面显示数据预览
+            if 'cleaned_df' in st.session_state:
+                st.subheader("清理后的数据预览")
+                st.dataframe(st.session_state.cleaned_df.head(10))
+        else:
+            st.warning("请先上传数据文件")
     
     elif menu == "模型训练":
         st.sidebar.header("训练参数设置")
@@ -152,7 +187,7 @@ def main():
                 }))
     
     elif menu == "效果验证":
-        st.sidebar.header("模型加载")
+        st.sidebar.header("模型载")
         model_file = st.sidebar.file_uploader("选择模型文件", type="pth")
         
         if model_file:
