@@ -12,7 +12,8 @@ import pandas as pd
 from data_processing.data_processor import DataProcessor
 from models.car_price_model import CarPriceModel
 from train import train_car_price_model
-
+import numpy as np
+import logging
 
 def update_progress(epoch, train_loss, test_loss):
     """
@@ -64,26 +65,8 @@ def train_model(epochs, learning_rate):
     test_losses = []
     
     try:
-        # 调用训练函数，但需要修改train_car_price_model来支持回调
-        def update_progress(epoch, train_loss, test_loss):
-            # 更新进度条
-            progress = (epoch + 1) / epochs
-            progress_bar.progress(progress)
-            
-            # 更新状态文本
-            status_text.text(f'训练轮次 {epoch+1}/{epochs} - 训练损失: {train_loss:.5f}, 测试损失: {test_loss:.5f}')
-            
-            # 更新损失图���
-            train_losses.append(train_loss)
-            test_losses.append(test_loss)
-            loss_df = pd.DataFrame({
-                "训练损失": train_losses,
-                "测试损失": test_losses
-            })
-            loss_chart.line_chart(loss_df)
-        
         # 调用训练函数
-        model, train_losses, test_losses = train_car_price_model(
+        model, train_losses, test_losses, processor = train_car_price_model(
             st.session_state.uploaded_file.name,
             epochs=epochs,
             learning_rate=learning_rate,
@@ -93,6 +76,19 @@ def train_model(epochs, learning_rate):
         # 保存模型
         model_save_path = "trained_model.pth"
         torch.save(model.state_dict(), model_save_path)
+        
+        # 保存缩放参数 - 现在processor是训练函数返回的
+        if processor is not None:  # 添加检查
+            scaling_params_path = "scaling_params.npz"
+            np.savez(
+                scaling_params_path,
+                mean_X=processor.mean_X,
+                std_X=processor.std_X,
+                mean_y=processor.mean_y,
+                std_y=processor.std_y
+            )
+        else:
+            st.warning("未能获取数据处理器实例，缩放参数未保存")
         
         return model, train_losses, test_losses
         
@@ -116,23 +112,31 @@ def load_model(model_path, input_features):
     # 初始化模型
     model = CarPriceModel(in_features=input_features, out_features=1)
     
-    # 如果输入是文件对象，需要先读取内容
-    if hasattr(model_path, 'read'):
-        model_data = model_path.read()
-        # 创建临时的BytesIO对象
-        import io
-        buffer = io.BytesIO(model_data)
-        # 加载模型参数
-        state_dict = torch.load(buffer, map_location=device)
-    else:
-        # 如果是文件路径，直接加载
-        state_dict = torch.load(model_path, map_location=device)
-    
-    # 加载模型参数
-    model.load_state_dict(state_dict)
-    model.to(device)
-    model.eval()  # 设置为评估模式
-    return model
+    try:
+        # 如果输入是文件对象，需要先读取内容
+        if hasattr(model_path, 'read'):
+            model_data = model_path.read()
+            import io
+            buffer = io.BytesIO(model_data)
+            # 尝试加载模型
+            loaded = torch.load(buffer, map_location=device)
+        else:
+            loaded = torch.load(model_path, map_location=device)
+        
+        # 判断加载的是整个模型还是状态字典
+        if isinstance(loaded, CarPriceModel):
+            # 如果加载的是整个模型，直接使用
+            model = loaded
+        else:
+            # 如果加载的是状态字典，加载参数
+            model.load_state_dict(loaded)
+            
+        model.to(device)
+        model.eval()  # 设置为评估模式
+        return model
+        
+    except Exception as e:
+        raise Exception(f"加载模型时出错: {str(e)}")
 
 def predict_price(model, features):
     """
@@ -147,25 +151,45 @@ def predict_price(model, features):
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    # 确保输入是正确的形状
-    if len(features.shape) == 1:
-        features = features.reshape(1, -1)
-    
-    # 转换为tensor
-    features_tensor = torch.FloatTensor(features).to(device)
-    
-    # 进行预测
-    with torch.no_grad():
-        prediction = model(features_tensor)
-    
-    return prediction.item()
+    try:
+        # 确保输入是正确的形状和类型
+        if isinstance(features, pd.Series):
+            features = features.values
+            
+        if len(features.shape) == 1:
+            features = features.reshape(1, -1)
+            
+        # 转换为tensor并移动到正确的设备
+        features = torch.FloatTensor(features).to(device)
+        
+        # 进行预测
+        with torch.no_grad():
+            prediction = model(features)
+            return prediction.item()
+            
+    except Exception as e:
+        raise Exception(f"预测过程中发生错误: {str(e)}")
 
 def show_file_uploader():
     """显示文件上传组件"""
     uploaded_file = st.sidebar.file_uploader("选择CSV文件", type="csv", key="shared_uploader")
     if uploaded_file and uploaded_file != st.session_state.get('uploaded_file'):
         st.session_state.uploaded_file = uploaded_file
-        st.session_state.df = pd.read_csv(uploaded_file, delimiter='\s+')
+        # 读取CSV时指定数据类型
+        try:
+            df = pd.read_csv(uploaded_file, delimiter='\s+')
+            # 尝试将可能是数值的列转换为float类型
+            for col in df.columns:
+                try:
+                    if df[col].dtype == 'object':  # 如果列是对象类型
+                        df[col] = pd.to_numeric(df[col], errors='coerce')  # 尝试转换为数值
+                except Exception as e:
+                    logging.warning(f"列 {col} 转换类型时出错: {str(e)}")
+            
+            st.session_state.df = df
+        except Exception as e:
+            st.error(f"读取文件时出错: {str(e)}")
+            return None
     return uploaded_file
 
 def main():
@@ -177,7 +201,7 @@ def main():
         ["数据分析", "数据清洗", "模型训练", "效果验证"]
     )
     
-    # 存储会话状态
+    # 存储话状态
     if 'uploaded_file' not in st.session_state:
         st.session_state.uploaded_file = None
     if 'cleaned_data' not in st.session_state:
@@ -221,14 +245,14 @@ def main():
                 st.sidebar.markdown("---")  # 添加分隔线
                 st.sidebar.subheader("保存清洗后的数据")
                 
-                # 添���目录选择输入框到侧边栏,默认保存到上级的data目录
+                # 添加目录选择输入框到侧边栏,默认保存到上级的data目录
                 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 default_save_dir = os.path.join(current_dir, "data")
                 
                 save_dir = st.sidebar.text_input(
                     "保存目录",
                     value=default_save_dir,
-                    help="输入要保存清洗后数据的目录路径",
+                    help="输入要保存���洗后数据的目录路径",
                     key="save_dir_input"
                 )
                 
@@ -287,12 +311,39 @@ def main():
                 st.session_state.total_epochs = epochs
                 
                 with st.spinner("正在训练模型..."):
-                    model, train_losses, test_losses = train_car_price_model(
+                    model, train_losses, test_losses, processor = train_car_price_model(
                         df,
                         epochs=epochs,
                         learning_rate=learning_rate,
                         progress_callback=update_progress
                     )
+                    # 保存模型和缩放参数
+                    try:
+                        # 保存模型
+                        model_save_path = "model.pth"
+                        torch.save(model.state_dict(), model_save_path)
+                        
+                        # 保存缩放参数
+                        if processor is not None:
+                            scaling_params_path = "scaling_params.npz"
+                            np.savez(
+                                scaling_params_path,
+                                mean_X=processor.mean_X,
+                                std_X=processor.std_X,
+                                mean_y=processor.mean_y,
+                                std_y=processor.std_y
+                            )
+                            st.write(f"mean_X: {processor.mean_X}")
+                            st.write(f"std_X: {processor.std_X}")
+                            st.write(f"mean_y: {processor.mean_y}")
+                            st.write(f"std_y: {processor.std_y}")
+                            st.success(f"模型已保存至: {model_save_path}")
+                            st.success(f"缩放参数已保存至: {scaling_params_path}")
+                        else:
+                            st.warning("未能获取数据处理器实例，缩放参数未保存")
+                    except Exception as e:
+                        st.error(f"保存模型或缩放参数时发生错误: {str(e)}")
+                        
                 st.success("模型训练完成！")
                 st.line_chart(pd.DataFrame({
                     "训练损失": train_losses,
@@ -301,42 +352,71 @@ def main():
     
     elif menu == "效果验证":
         st.sidebar.header("模型载入")
-        model_file = st.sidebar.file_uploader("选择模型文件", type="pth")
         
-        if model_file:
+        # 获取当前目录下的所有.pth和.npz文件
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        model_files = [f for f in os.listdir(current_dir) if f.endswith('.pth')]
+        scaling_param_files = [f for f in os.listdir(current_dir) if f.endswith('.npz')]
+        
+        # 创建下拉框选择模型文件和缩放参数文件
+        model_file = st.sidebar.selectbox("选择模型文件", model_files)
+        scaling_params_file = st.sidebar.selectbox("选择缩放参数文件", scaling_param_files)
+        
+        if model_file and scaling_params_file:
             # 构建测试数据文件的绝对路径
-            current_dir = os.path.dirname(os.path.abspath(__file__))
             test_file = os.path.join(os.path.dirname(current_dir), "data", "used_car_testB_20200421.csv")
             
             if os.path.exists(test_file):
                 test_df = pd.read_csv(test_file, delimiter='\s+')
-                sample_data = test_df.sample(n=1).iloc[0]
                 
+                # 使用_data_processor中的_preprocess_features进行数据预处理
+                processor = DataProcessor()
+                sample_df = processor.preprocess_sample(test_df)
+            
+                # 随机选择一条预处理后的数据
+                sample_data = pd.DataFrame(sample_df).sample(n=1).iloc[0]
+
                 # 显示输入数据
                 st.subheader("样本数据")
                 st.write(sample_data)
                 
                 if st.button("预测"):
-                    try:
-                        # 数据预处理
-                        processor = DataProcessor()
-                        X = processor.preprocess_single_sample(sample_data)
+                    # try:
+                    # 加载训练时保存的缩放参数
+                    scaling_params_path = os.path.join(current_dir, scaling_params_file)
+                    scaling_params = np.load(scaling_params_path, allow_pickle=True)
+                    processor = DataProcessor()
+                    processor.mean_y = scaling_params['mean_y']
+                    processor.std_y = scaling_params['std_y']
+                    processor.mean_X = scaling_params['mean_X']
+                    processor.std_X = scaling_params['std_X']
+                    
+                    # 检查缩放参数是否为 None
+                    if processor.mean_X is None or processor.std_X is None:
+                        st.error("缩放参数未正确加载，请检查模型和缩放参数文件。")
+                    else:
+                        # 使用缩放参数进行标准化
+                        X = (sample_data - processor.mean_X) / processor.std_X
+                        
+                        # 确保 X 是 float 类型的 numpy 数组
+                        X = X.astype(np.float32)
                         
                         # 加载模型并预测
-                        model = load_model(model_file, X.shape[1])
+                        model_path = os.path.join(current_dir, model_file)
+                        model = load_model(model_path, len(X))  # 修改这里，使用特征长度
                         predicted_price = predict_price(model, X)
                         
-                        # 如果有缩放参数，进行反向转换
-                        scaling_params_path = os.path.join(os.path.dirname(current_dir), "models", "scaling_params.npy")
-                        if os.path.exists(scaling_params_path):
-                            scaling_params = processor.load_scaling_params(scaling_params_path)
-                            predicted_price = predicted_price * scaling_params['y_std'] + scaling_params['y_mean']
+                        # 使用训练时的缩放参数进行反向转换
+                        predicted_price = predicted_price * processor.std_y + processor.mean_y
                         
                         st.success(f"预测价格：{predicted_price:.2f}")
-                    except Exception as e:
-                        st.error(f"预测过程中发生错误: {str(e)}")
+                            
+                    # except Exception as e:
+                    #     st.error(f"预测过程中发生错误: {str(e)}")
             else:
                 st.error(f"找不到测试数据文件：{test_file}")
+        else:
+            st.warning("请上传模型文件和缩放参数文件")
 
 if __name__ == "__main__":
     main() 

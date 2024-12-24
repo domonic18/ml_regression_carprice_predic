@@ -71,7 +71,7 @@ def train_car_price_model(data_input: str,
     trainer.save_model(model_save_path)
     trainer.plot_losses(train_losses, test_losses, plot_save_path)
     
-    return model, train_losses, test_losses
+    return model, train_losses, test_losses, processor
 
 if __name__ == "__main__":
     current_dir = os.getcwd()

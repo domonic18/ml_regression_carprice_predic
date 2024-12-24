@@ -89,12 +89,13 @@ class ModelTrainer:
 
     def save_model(self, path):
         """
-        保存模型
+        保存模型参数
         
         Args:
             path: 模型保存路径
         """
-        torch.save(self.model, path)
+        # 保存模型参数而不是整个模型
+        torch.save(self.model.state_dict(), path)
 
     def plot_losses(self, train_losses, test_losses, save_path=None):
         """

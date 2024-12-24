@@ -8,6 +8,13 @@ class DataProcessor:
     数据处理类，负责数据的加载、分析和预处理
     """
     
+    def __init__(self):
+        # 添加属性来存储训练集的统计量
+        self.mean_X = None
+        self.std_X = None
+        self.mean_y = None
+        self.std_y = None
+
     @staticmethod
     def load_data(file_path: str) -> pd.DataFrame:
         """
@@ -34,7 +41,7 @@ class DataProcessor:
             tuple: (特征数据X, 目标变量y)
         """
         logging.info("开始分析数据...")
-        logging.info(f"数据形状: {df.shape}")
+        logging.info(f"数��形状: {df.shape}")
         logging.info(f"\n数据类型信息:\n{df.dtypes}")
         logging.info(f"\n数据统计信息:\n{df.describe()}")
         
@@ -67,18 +74,16 @@ class DataProcessor:
         return DataProcessor.analyze_data(df)
 
     @staticmethod
-    def prepare_data(X, y, test_size=0.2, random_state=0) -> tuple:
+    def _preprocess_features(X: pd.DataFrame, y: pd.Series) -> tuple:
         """
-        准备训练集和测试集，包括数据标准化
+        预处理特征数据，包括数据类型转换和处理缺失值
         
         Args:
-            X: 特征数据
-            y: 目标变量
-            test_size: 测试集比例
-            random_state: 随机种子
+            X (pd.DataFrame): 特征数据
+            y (pd.Series): 目标变量
             
         Returns:
-            tuple: (X_train_normalized, X_test_normalized, y_train, y_test)
+            tuple: (处理后的特征X, 处理后的目标变量y)
         """
         # 数据类型转换
         for column in X.columns:
@@ -89,6 +94,41 @@ class DataProcessor:
         combined_df = combined_df.dropna()
         X = combined_df.drop('target', axis=1)
         y = combined_df['target']
+        
+        return X, y
+
+    @staticmethod
+    def _remove_missing_values(X: pd.DataFrame) -> pd.DataFrame:
+        """
+        仅剔除特征数据中的缺失值
+        
+        Args:
+            X (pd.DataFrame): 特征数据
+            
+        Returns:
+            pd.DataFrame: 处理后的特征数据
+        """
+        # 剔除包含缺失值的行
+        X_cleaned = X.dropna()
+        
+        return X_cleaned
+
+
+    def prepare_data(self,X, y, test_size=0.2, random_state=0) -> tuple:
+        """
+        准备训练集和测试集，包括数据标准化
+        
+        Args:
+            X: 特征数据
+            y: 目标变量
+            test_size: 测试集比例
+            random_state: 随机种子
+            
+        Returns:
+            tuple: (X_train_normalized, X_test_normalized, y_train_normalized, y_test_normalized)
+        """
+        # 预处理数据
+        X, y = DataProcessor._preprocess_features(X, y)
 
         # 数据分割
         X_train, X_test, y_train, y_test = train_test_split(
@@ -101,20 +141,26 @@ class DataProcessor:
         y_train_np = y_train.values
         y_test_np = y_test.values
         
-        # X标签标准化
+        # 计算并保存统计量
         mean_X = X_train_np.mean(axis=0)
         std_X = X_train_np.std(axis=0)
-        std_X[std_X == 0] = 1e-9  # 避免除以零
+        std_X[std_X == 0] = 1e-9
+        
+        mean_y = y_train_np.mean()
+        std_y = y_train_np.std()
+        if std_y == 0:
+            std_y = 1e-9
+            
+        # 将统计量保存为类属性
+        self.mean_X = mean_X
+        self.std_X = std_X
+        self.mean_y = mean_y
+        self.std_y = std_y
         
         X_train_normalized = (X_train_np - mean_X) / std_X
         X_test_normalized = (X_test_np - mean_X) / std_X
         
         # y标签标准化
-        mean_y = y_train_np.mean()
-        std_y = y_train_np.std()
-        if std_y == 0:
-            std_y = 1e-9
-        
         y_train_normalized = (y_train_np - mean_y) / std_y
         y_test_normalized = (y_test_np - mean_y) / std_y
         
@@ -122,9 +168,9 @@ class DataProcessor:
         
         return X_train_normalized, X_test_normalized, y_train_normalized, y_test_normalized 
 
-    def preprocess_single_sample(self, sample_data: pd.Series) -> np.ndarray:
+    def preprocess_sample(self, sample_data: pd.DataFrame) -> pd.DataFrame:
         """
-        预处理单条数据用于预测
+        使用训练集的统计量预处理数据用于预测
         
         Args:
             sample_data (pd.Series): 单条数据
@@ -132,29 +178,15 @@ class DataProcessor:
         Returns:
             np.ndarray: 预处理后的特征数据
         """
-        # 将数据转换为DataFrame
-        sample_df = pd.DataFrame([sample_data])
+
         
-        # 如果存在price列，删除它
-        if 'price' in sample_df.columns:
-            sample_df = sample_df.drop(['price'], axis=1)
+        # 剔除缺失值
+        sample_df = self._remove_missing_values(sample_data)
         
         # 数据类型转换
         for column in sample_df.columns:
-            sample_df[column] = pd.to_numeric(sample_df[column], errors='coerce')
+            sample_df.loc[:, column] = pd.to_numeric(sample_df[column], errors='coerce')
         
-        # 处理缺失值
-        sample_df = sample_df.fillna(sample_df.mean())
-        
-        # 转换为numpy数组
-        X = sample_df.values
-        
-        # 标准化处理（使用与训练数据相同的均值和标准差）
-        # 注意：在实际应用中，需要保存训练数据的均值和标准差
-        mean_X = X.mean(axis=0)
-        std_X = X.std(axis=0)
-        std_X[std_X == 0] = 1e-9  # 避免除以零
-        
-        X_normalized = (X - mean_X) / std_X
-        
-        return X_normalized 
+        return sample_df
+
+
