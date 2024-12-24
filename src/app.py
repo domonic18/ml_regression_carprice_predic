@@ -334,7 +334,7 @@ def model_training():
 
 def model_validation():
     """效果验证功能"""
-    st.sidebar.header("模型载入")
+    st.sidebar.header("🔍 模型载入")
     
     # 获取当前目录下的所有.pth和.npz文件
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -342,8 +342,8 @@ def model_validation():
     scaling_param_files = [f for f in os.listdir(current_dir) if f.endswith('.npz')]
     
     # 创建下拉框选择模型文件和缩放参数文件
-    model_file = st.sidebar.selectbox("选择模型文件", model_files)
-    scaling_params_file = st.sidebar.selectbox("选择缩放参数文件", scaling_param_files)
+    model_file = st.sidebar.selectbox("📁 选择模型文件", model_files)
+    scaling_params_file = st.sidebar.selectbox("📁 选择缩放参数文件", scaling_param_files)
     
     if model_file and scaling_params_file:
         # 构建测试数据文件的绝对路径
@@ -360,63 +360,101 @@ def model_validation():
             sample_data = pd.DataFrame(sample_df).sample(n=1).iloc[0]
 
             # 显示输入数据
-            st.subheader("样本数据")
-            st.write(sample_data)
+            st.subheader("📝 样本数据")
             
-            if st.button("预测"):
-                # try:
-                # 加载训练时保存的缩放参数
-                scaling_params_path = os.path.join(current_dir, scaling_params_file)
-                scaling_params = np.load(scaling_params_path, allow_pickle=True)
-                processor = DataProcessor()
-                processor.mean_y = scaling_params['mean_y']
-                processor.std_y = scaling_params['std_y']
-                processor.mean_X = scaling_params['mean_X']
-                processor.std_X = scaling_params['std_X']
-                
-                # 检查缩放参数是否为 None
-                if processor.mean_X is None or processor.std_X is None:
-                    st.error("缩放参数未正确加载，请检查模型和缩放参数文件。")
-                else:
-                    # 使用缩放参数进行标准化
-                    X = (sample_data - processor.mean_X) / processor.std_X
+            # 创建两列布局
+            col1, col2 = st.columns(2)
+            
+            # 为每个特征创建编辑框
+            edited_values = {}
+            for i, (feature, value) in enumerate(sample_data.items()):
+                # 在左列或右列显示编辑框
+                with col1 if i % 2 == 0 else col2:
+                    edited_values[feature] = st.number_input(
+                        f"📊 {feature}",
+                        value=float(value),
+                        format="%.2f",
+                        key=f"feature_{feature}"
+                    )
+            
+            # 使用编辑后的值创建新的样本数据
+            edited_sample_data = pd.Series(edited_values)
+            
+            if st.button("🎯 开始预测"):
+                try:
+                    # 加载训练时保存的缩放参数
+                    scaling_params_path = os.path.join(current_dir, scaling_params_file)
+                    scaling_params = np.load(scaling_params_path, allow_pickle=True)
+                    processor = DataProcessor()
+                    processor.mean_y = scaling_params['mean_y']
+                    processor.std_y = scaling_params['std_y']
+                    processor.mean_X = scaling_params['mean_X']
+                    processor.std_X = scaling_params['std_X']
                     
-                    # 确保 X 是 float 类型的 numpy 数组
-                    X = X.astype(np.float32)
-                    
-                    # 加载模型并预测
-                    model_path = os.path.join(current_dir, model_file)
-                    model = load_model(model_path, len(X))  # 修改这里，使用特征长度
-                    predicted_price = predict_price(model, X)
-                    
-                    # 使用训练时的缩放参数进行反向转换
-                    predicted_price = predicted_price * processor.std_y + processor.mean_y
-                    
-                    st.success(f"预测价格：{predicted_price:.2f}")
+                    if processor.mean_X is None or processor.std_X is None:
+                        st.error("❌ 缩放参数未正确加载，请检查模型和缩放参数文件。")
+                    else:
+                        # 使用缩放参数进行标准化
+                        X = (edited_sample_data - processor.mean_X) / processor.std_X
+                        X = X.astype(np.float32)
                         
-                # except Exception as e:
-                #     st.error(f"预测过程中发生错误: {str(e)}")
+                        # 加载模型并预测
+                        model_path = os.path.join(current_dir, model_file)
+                        model = load_model(model_path, len(X))
+                        predicted_price = predict_price(model, X)
+                        predicted_price = predicted_price * processor.std_y + processor.mean_y
+                        
+                        st.success(f"💰 预测价格：¥{predicted_price:.2f}")
+                        
+                except Exception as e:
+                    st.error(f"❌ 预测过程中发生错误: {str(e)}")
         else:
-            st.error(f"找不到测试数据文件：{test_file}")
+            st.error(f"❌ 找不到测试数据文件：{test_file}")
     else:
-        st.warning("请上传模型文件和缩放参数文件")
+        st.warning("⚠️ 请上传模型文件和缩放参数文件")
 
 def main():
-    st.title("二手车价格预测系统")
+    st.title("🚗 二手车价格预测系统")
+    
+    # 添加项目说明
+    if not st.session_state.get('uploaded_file'):
+        st.markdown("""
+        ### 👋 欢迎使用二手车价格预测系统！
+        
+        本系统是一个基于深度学习的二手车价格预测工具，提供以下核心功能：
+        
+        - 📊 **数据分析**：对二手车数据进行可视化分析和统计
+        - 🧹 **数据清洗**：自动处理和清理原始数据
+        - 🔄 **模型训练**：使用深度学习模型训练价格预测器
+        - ✨ **效果验证**：验证模型预测效果并进行实时预测
+        
+        #### 使用说明
+        1. 在左侧边栏选择需要使用的功能
+        2. 上传数据文件（CSV格式）
+        3. 根据界面提示进行操作
+        
+        #### 关于我们
+        本项目由[17AI技术社区](http://17aitech.com)开发和维护，致力于为用户提供专业的人工智能解决方案。
+        
+        欢迎访问[17AI技术社区](http://17aitech.com)获取更多AI相关资源和教程！
+        """)
+        
+        st.markdown("---")
     
     # 侧边栏导航
+    st.sidebar.header("🎯 功能导航")
     menu = st.sidebar.selectbox(
-        "功能选择",
-        ["数据分析", "数据清洗", "模型训练", "效果验证"]
+        "请选择功能",
+        ["📊 数据分析", "🧹 数据清洗", "🔄 模型训练", "✨ 效果验证"]
     )
     
-    if menu == "数据分析":
+    if menu == "📊 数据分析":
         data_analysis()
-    elif menu == "数据清洗":
+    elif menu == "🧹 数据清洗":
         data_cleaning()
-    elif menu == "模型训练":
+    elif menu == "🔄 模型训练":
         model_training()
-    elif menu == "效果验证":
+    elif menu == "✨ 效果验证":
         model_validation()
 
 if __name__ == "__main__":
