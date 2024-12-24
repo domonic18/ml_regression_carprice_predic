@@ -1,0 +1,6 @@
+streamlit
+ydata-profiling
+streamlit-pandas-profiling
+torch
+pandas
+numpy
