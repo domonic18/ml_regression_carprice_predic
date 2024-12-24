@@ -8,7 +8,7 @@ from training.trainer import ModelTrainer
 from utils.logger import setup_logging
 
 
-def train_car_price_model(data_path: str, 
+def train_car_price_model(data_input: str, 
                          model_save_path: str = 'model.pth',
                          plot_save_path: str = 'loss_curve.png',
                          epochs: int = 10000,
@@ -33,7 +33,15 @@ def train_car_price_model(data_path: str,
     
     # 数据处理
     processor = DataProcessor()
-    X, y = processor.load_and_analyze_data(data_path)
+    
+    # 根据输入类型处理数据
+    if isinstance(data_input, str):
+        # 如果输入是文件路径
+        X, y = processor.load_and_analyze_data(data_input)
+    else:
+        # 如果输入是DataFrame
+        X, y = processor.load_and_analyze_data(data_input)
+
     X_train, X_test, y_train, y_test = processor.prepare_data(X, y)
     
     # 创建数据加载器

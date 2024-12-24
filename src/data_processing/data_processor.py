@@ -80,14 +80,16 @@ class DataProcessor:
         Returns:
             tuple: (X_train_normalized, X_test_normalized, y_train, y_test)
         """
-        # 确保数据为数值类型
-        X = X.select_dtypes(include=[np.number]).copy()
-        
-        # 处理缺失值
-        X = X.fillna(X.mean())
-        y = pd.to_numeric(y, errors='coerce')
-        y = y.fillna(y.mean())
-        
+        # 数据类型转换
+        for column in X.columns:
+            X[column] = pd.to_numeric(X[column], errors='coerce')
+
+        # 剔除包含缺失值的行
+        combined_df = pd.concat([X, pd.Series(y, name='target')], axis=1)
+        combined_df = combined_df.dropna()
+        X = combined_df.drop('target', axis=1)
+        y = combined_df['target']
+
         # 数据分割
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size, random_state=random_state
@@ -116,4 +118,43 @@ class DataProcessor:
         y_train_normalized = (y_train_np - mean_y) / std_y
         y_test_normalized = (y_test_np - mean_y) / std_y
         
+
+        
         return X_train_normalized, X_test_normalized, y_train_normalized, y_test_normalized 
+
+    def preprocess_single_sample(self, sample_data: pd.Series) -> np.ndarray:
+        """
+        预处理单条数据用于预测
+        
+        Args:
+            sample_data (pd.Series): 单条数据
+            
+        Returns:
+            np.ndarray: 预处理后的特征数据
+        """
+        # 将数据转换为DataFrame
+        sample_df = pd.DataFrame([sample_data])
+        
+        # 如果存在price列，删除它
+        if 'price' in sample_df.columns:
+            sample_df = sample_df.drop(['price'], axis=1)
+        
+        # 数据类型转换
+        for column in sample_df.columns:
+            sample_df[column] = pd.to_numeric(sample_df[column], errors='coerce')
+        
+        # 处理缺失值
+        sample_df = sample_df.fillna(sample_df.mean())
+        
+        # 转换为numpy数组
+        X = sample_df.values
+        
+        # 标准化处理（使用与训练数据相同的均值和标准差）
+        # 注意：在实际应用中，需要保存训练数据的均值和标准差
+        mean_X = X.mean(axis=0)
+        std_X = X.std(axis=0)
+        std_X[std_X == 0] = 1e-9  # 避免除以零
+        
+        X_normalized = (X - mean_X) / std_X
+        
+        return X_normalized 
