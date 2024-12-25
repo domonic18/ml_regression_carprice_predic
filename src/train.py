@@ -75,5 +75,5 @@ def train_car_price_model(data_input: str,
 
 if __name__ == "__main__":
     current_dir = os.getcwd()
-    data_path = os.path.join(current_dir, 'data', 'used_car_train_20200313_handled.csv')
+    data_path = os.path.join(current_dir, 'data', 'used_car_train_20200313_cleaned.csv')
     model, train_losses, test_losses = train_car_price_model(data_path)

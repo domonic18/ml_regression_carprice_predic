@@ -50,12 +50,12 @@ conda activate deeplearning
 pip install -r requirements.txt
 ```
 
-1. 下载数据集
+4. 下载数据集
 访问下载地址，将数据集下载到data目录下
 
-1. 运行项目
+5. 运行项目
 ```
-streamlit run app.py
+streamlit run src/app.py
 ```
 
 
