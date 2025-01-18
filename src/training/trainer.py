@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import torch
 import logging
 import matplotlib.pyplot as plt
