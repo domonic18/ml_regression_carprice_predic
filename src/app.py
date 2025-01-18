@@ -1,6 +1,17 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 """
 二手车价格预测系统的 Streamlit 前端应用程序。
-提供数据分析、数据清理、模型训练和效果验证等功能。
+本模块实现了streamlit的前端页面，功能包括：
+1. 数据分析
+2. 数据清理
+3. 模型训练
+4. 效果验证
+
+作者: 诸葛东明
+日期: 2025-01-04
+版本: 1.0.0
 """
 
 import streamlit as st
@@ -345,19 +356,26 @@ def model_validation():
     model_file = st.sidebar.selectbox("📁 选择模型文件", model_files)
     scaling_params_file = st.sidebar.selectbox("📁 选择缩放参数文件", scaling_param_files)
     
+    # 添加随机读取数据的按钮
+    if st.sidebar.button("🎲 随机读取新数据"):
+        # 清除已保存的样本数据，触发重新随机选择
+        st.session_state.pop('sample_data', None)
+    
     if model_file and scaling_params_file:
         # 构建测试数据文件的绝对路径
         test_file = os.path.join(os.path.dirname(current_dir), "data", "used_car_testB_20200421.csv")
         
         if os.path.exists(test_file):
-            test_df = pd.read_csv(test_file, delimiter='\s+')
+            # 只在首次加载或点击随机按钮时处理数据
+            if 'sample_data' not in st.session_state:
+                test_df = pd.read_csv(test_file, delimiter='\s+')
+                processor = DataProcessor()
+                sample_df = processor.preprocess_sample(test_df)
+                # 随机选择一条预处理后的数据并存储在session state中
+                st.session_state.sample_data = pd.DataFrame(sample_df).sample(n=1).iloc[0]
             
-            # 使用_data_processor中的_preprocess_features进行数据预处理
-            processor = DataProcessor()
-            sample_df = processor.preprocess_sample(test_df)
-        
-            # 随机选择一条预处理后的数据
-            sample_data = pd.DataFrame(sample_df).sample(n=1).iloc[0]
+            # 使用存储的样本数据
+            sample_data = st.session_state.sample_data
 
             # 显示输入数据
             st.subheader("📝 样本数据")
